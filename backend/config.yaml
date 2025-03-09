@@ -1,0 +1,11 @@
+ollama:
+  host: "http://localhost:11434"
+
+storage:
+  chat_dir: "./storage/chats"
+  database: "./storage/database.db"
+
+server:
+  host: "localhost"
+  port: 8080
+  cors_origins: ["*"] 
