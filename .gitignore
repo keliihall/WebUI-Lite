@@ -1,28 +1,48 @@
-# Python
+# Dependencies
+node_modules/
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+*.pyc
+
+# Environment
+.env
+.venv
 venv/
-ENV/
 
 # IDE
-.idea/
 .vscode/
-*.swp
-*.swo
+.idea/
 
-# Project specific
-backend/storage/*
-!backend/storage/.gitkeep
-.env
-.env.*
+# Build
+dist/
+build/
+
+# Database
+*.db
+storage/database.db
+
+# Logs
+*.log
+npm-debug.log*
 
 # System
 .DS_Store
 Thumbs.db
 
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+ENV/
+
+# Project specific
+backend/storage/*
+!backend/storage/.gitkeep
+.env.*
+
+# IDE
+*.swp
+*.swo
+
 # Logs
-*.log
 logs/ 
