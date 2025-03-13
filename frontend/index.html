@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-bind:class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYNEU WebUI - AI Chat Interface</title>
+    <link rel="stylesheet" href="./src/styles/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" 
+          rel="stylesheet"
+          media="print"
+          onload="this.media='all'"
+    >
+    <script type="module">
+        import Alpine from 'alpinejs';
+        import persist from '@alpinejs/persist';
+        import { createChatStore } from './src/store/chat.js';
+        
+        window.Alpine = Alpine;
+        Alpine.plugin(persist);
+        Alpine.data('app', createChatStore);
+        Alpine.start();
+    </script>
+    <style>
+        @media (forced-colors: active) {
+            .resize-handle:hover, 
+            .resize-handle.dragging,
+            .model-selector:hover,
+            .custom-textarea:hover,
+            .scroll-button,
+            .scroll-button:hover {
+                forced-color-adjust: none;
+            }
+        }
+        
+        .resize-handle {
+            cursor: ew-resize;
+            width: 4px;
+            background: transparent;
+            transition: background 0.2s;
+        }
+        .resize-handle:hover, .resize-handle.dragging {
+            background: rgba(128, 128, 128, 0.2);
+        }
+        .user-select-none {
+            user-select: none;
+        }
+        .custom-textarea {
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .custom-textarea:hover {
+            border-color: rgba(107, 114, 128, 0.2);
+        }
+        .dark .custom-textarea:hover {
+            border-color: rgba(75, 85, 99, 0.2);
+        }
+        .custom-textarea:focus {
+            outline: none;
+        }
+        .dark .custom-textarea:focus {
+            outline: none;
+        }
+        .model-selector {
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .model-selector:hover {
+            background-color: rgba(107, 114, 128, 0.05);
+        }
+        .dark .model-selector:hover {
+            background-color: rgba(75, 85, 99, 0.1);
+        }
+        .model-dropdown {
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(107, 114, 128, 0.1);
+        }
+        .dark .model-dropdown {
+            border-color: rgba(75, 85, 99, 0.2);
+        }
+        .send-button {
+            transition: all 0.2s ease;
+        }
+        /* 确保侧边栏没有阴影 */
+        .sidebar-content {
+            box-shadow: none !important;
+        }
+        /* 消息内容样式优化 */
+        .prose {
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        .prose pre {
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        .prose img {
+            max-width: 100%;
+            height: auto;
+        }
+        /* 思考状态动画 */
+        @keyframes thinking {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+        }
+        .thinking::after {
+            content: '';
+            animation: thinking 1.5s steps(1) infinite;
+        }
+        .scroll-button {
+            position: absolute;
+            padding: 0.625rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            color: rgba(107, 114, 128, 0.8);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+        }
+        .scroll-button.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .dark .scroll-button {
+            background-color: rgba(43, 48, 56, 0.9);
+            border-color: rgba(75, 85, 99, 0.2);
+            color: rgba(156, 163, 175, 0.8);
+        }
+        .scroll-button:hover {
+            background-color: rgba(255, 255, 255, 0.95);
+            color: rgba(17, 24, 39, 0.95);
+            transform: translateY(-1px);
+        }
+        .dark .scroll-button:hover {
+            background-color: rgba(43, 48, 56, 0.95);
+            color: rgba(229, 231, 235, 0.95);
+        }
+        .scroll-button svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body class="h-full transition-colors duration-200" 
+    x-data="app" 
+    @mousemove.window="doDrag($event)" 
+    @mouseup.window="stopDrag()"
+    :class="{ 'bg-gray-50 dark:bg-dark-900': true }"
+>
+    <div class="min-h-full">
+        <!-- Error Toast -->
+        <div x-show="error" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-y-2"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform translate-y-0"
+             x-transition:leave-end="opacity-0 transform translate-y-2"
+             class="fixed top-4 right-4 z-50 bg-red-50 dark:bg-red-900/50 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2"
+        >
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+            </svg>
+            <span x-text="error"></span>
+        </div>
+
+        <!-- Top Navigation -->
+        <nav class="bg-white dark:bg-dark-800 shadow-sm border-b border-gray-200 dark:border-dark-border">
+            <div class="mx-auto px-4">
+                <div class="flex h-16 items-center">
+                    <!-- Left section: Sidebar toggle and Title -->
+                    <div class="flex items-center space-x-2">
+                        <button @click="sidebarOpen = !sidebarOpen" 
+                            class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 -ml-2 p-2 rounded-lg transition-colors duration-200"
+                        >
+                            <svg class="h-5 w-5 transition-transform duration-300 ease-in-out" 
+                                fill="none" 
+                                viewBox="0 0 24 24" 
+                                stroke="currentColor" 
+                                :class="{ 'rotate-90': !sidebarOpen }"
+                            >
+                                <path stroke-linecap="round" 
+                                    stroke-linejoin="round" 
+                                    stroke-width="1.75" 
+                                    d="M8 7v10m4-10v10m4-10v10" 
+                                />
+                            </svg>
+                        </button>
+                        <div class="flex items-center">
+                            <h1 class="text-xl tracking-tight relative">
+                                <a href="/" class="font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent hover:opacity-80 transition-opacity">CYNEU&nbsp;</a>
+                                <span class="font-medium text-gray-700 dark:text-gray-200">WebUI</span>
+                                <span class="absolute -top-0.5 -right-9 inline-flex items-center px-1.5 leading-[14px] text-[10px] font-medium bg-gradient-to-r from-primary to-purple-600 text-white rounded-full">
+                                    Lite
+                                </span>
+                            </h1>
+                        </div>
+                    </div>
+
+                    <div class="flex-1"></div>
+
+                    <!-- Right section with theme toggle -->
+                    <div class="flex items-center space-x-2">
+                        <button 
+                            @click="toggleDarkMode()" 
+                            class="rounded-lg p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                        >
+                            <svg x-show="!darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                            </svg>
+                            <svg x-show="darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                            </svg>
+                        </button>
+
+                        <!-- Three dots menu -->
+                        <div class="relative" x-data="{ open: false }">
+                            <button 
+                                @click="open = !open"
+                                class="rounded-lg p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            >
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                </svg>
+                            </button>
+
+                            <!-- Dropdown menu -->
+                            <div 
+                                x-show="open" 
+                                @click.away="open = false"
+                                class="absolute right-0 mt-2 w-48 rounded-lg bg-white dark:bg-dark-800 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
+                                x-transition:enter="transition ease-out duration-100"
+                                x-transition:enter-start="transform opacity-0 scale-95"
+                                x-transition:enter-end="transform opacity-100 scale-100"
+                                x-transition:leave="transition ease-in duration-75"
+                                x-transition:leave-start="transform opacity-100 scale-100"
+                                x-transition:leave-end="transform opacity-0 scale-95"
+                            >
+                                <div class="py-1">
+                                    <a 
+                                        href="/settings"
+                                        target="_blank"
+                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-700 flex items-center"
+                                    >
+                                        <svg class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        </svg>
+                                        系统设置
+                                    </a>
+                                    <button 
+                                        @click="logout(); open = false"
+                                        class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-700 flex items-center"
+                                    >
+                                        <svg class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                        </svg>
+                                        退出登录
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <div class="flex h-[calc(100vh-4rem)]">
+            <!-- Sidebar with resize handle -->
+            <div x-show="sidebarOpen" 
+                 class="flex"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="-translate-x-full"
+                 x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-300"
+                 x-transition:leave-start="translate-x-0"
+                 x-transition:leave-end="-translate-x-full">
+                <!-- Sidebar content -->
+                <div :style="'width: ' + sidebarWidth + 'px'" class="sidebar-content flex-shrink-0 border-r border-gray-200 dark:border-dark-border bg-white dark:bg-dark-800">
+                    <div class="h-full px-3 py-4 flex flex-col">
+                        <div class="flex-1 space-y-2">
+                            <button 
+                                @click="createNewChat()"
+                                class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-md bg-gray-100 dark:bg-dark-600 text-gray-900 dark:text-white">
+                                <svg class="mr-3 h-5 w-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                                新对话
+                            </button>
+                            <div class="border-b border-gray-200 dark:border-dark-border my-4 opacity-50"></div>
+                            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3 mb-2">
+                                最近对话
+                            </div>
+                            <div class="space-y-1">
+                                <template x-for="chat in chats" :key="chat.id">
+                                    <a href="#" 
+                                        @click.prevent="loadChatMessages(chat.id)"
+                                        class="group flex items-center px-3 py-2 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-600"
+                                        :class="{ 'bg-gray-100 dark:bg-dark-600': currentChatId === chat.id }"
+                                    >
+                                        <div class="flex-1 min-w-0" 
+                                            x-data="{ 
+                                                isEditing: false,
+                                                editTitle: chat.title,
+                                                startEditing() {
+                                                    this.isEditing = true;
+                                                    this.editTitle = chat.title;
+                                                    this.$nextTick(() => {
+                                                        this.$refs.titleInput?.focus();
+                                                        this.$refs.titleInput?.select();
+                                                    });
+                                                }
+                                            }"
+                                            :id="'chat-' + chat.id"
+                                            @start-edit.window="if ($event.detail.chatId === chat.id) startEditing()">
+                                            <div x-show="!isEditing" 
+                                                 class="truncate" 
+                                                 x-text="chat.title"
+                                                 @dblclick="startEditing()">
+                                            </div>
+                                            <input
+                                                x-show="isEditing"
+                                                x-ref="titleInput"
+                                                type="text"
+                                                class="w-full px-1 py-0.5 text-sm bg-white dark:bg-dark-700 border border-gray-300 dark:border-dark-500 rounded"
+                                                x-model="editTitle"
+                                                @blur="isEditing = false"
+                                                @keydown.enter="renameChat(chat.id, editTitle); isEditing = false"
+                                                @keydown.escape="isEditing = false"
+                                                @click.stop
+                                            >
+                                        </div>
+                                        <!-- 更多操作按钮 -->
+                                        <div class="relative" x-data="{ open: false }">
+                                        <button 
+                                                @click.stop="open = !open"
+                                                class="ml-2 p-1 rounded-md text-gray-400 opacity-0 group-hover:opacity-100 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-500 transition-all duration-200"
+                                                :class="{ 'opacity-100': currentChatId === chat.id || open }"
+                                            >
+                                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                          d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                            </svg>
+                                        </button>
+                                            <!-- 下拉菜单 -->
+                                            <div 
+                                                x-show="open" 
+                                                @click.away="open = false"
+                                                class="absolute right-0 mt-1 w-40 rounded-md shadow-lg bg-white dark:bg-dark-700 ring-1 ring-black ring-opacity-5 z-50"
+                                                x-transition:enter="transition ease-out duration-100"
+                                                x-transition:enter-start="transform opacity-0 scale-95"
+                                                x-transition:enter-end="transform opacity-100 scale-100"
+                                                x-transition:leave="transition ease-in duration-75"
+                                                x-transition:leave-start="transform opacity-100 scale-100"
+                                                x-transition:leave-end="transform opacity-0 scale-95"
+                                            >
+                                                <div class="py-1">
+                                                    <button 
+                                                        @click.stop="$dispatch('start-edit', { chatId: chat.id }); open = false"
+                                                        class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-600"
+                                                    >
+                                                        <div class="flex items-center">
+                                                            <svg class="mr-3 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                            编辑名称
+                                                        </div>
+                                                    </button>
+                                                    <button 
+                                                        @click.stop="deleteChat(chat.id); open = false"
+                                                        class="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                    >
+                                                        <div class="flex items-center">
+                                                            <svg class="mr-3 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                            删除对话
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- Sidebar footer with user info -->
+                        <div class="mt-auto pt-4 border-t border-gray-200 dark:border-dark-border">
+                            <div class="flex items-center gap-3 px-3 relative">
+                                <div class="flex-shrink-0">
+                                    <div class="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-400 flex items-center justify-center shadow-sm ring-2 ring-white dark:ring-dark-800">
+                                        <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="flex-1 min-w-0" x-data="{ isEditing: false, nickname: 'momo' }">
+                                    <div x-show="!isEditing" @dblclick="isEditing = true" class="cursor-pointer group">
+                                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200" x-text="nickname"></p>
+                                    </div>
+                                    <div x-show="isEditing" class="flex items-center space-x-2">
+                                        <input type="text" 
+                                            x-model="nickname" 
+                                            @blur="isEditing = false"
+                                            @keydown.enter="isEditing = false"
+                                            @keydown.escape="isEditing = false"
+                                            class="block w-full text-sm rounded-md border-0 py-1 text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-dark-600 placeholder:text-gray-400 focus:ring-2 focus:ring-primary bg-white dark:bg-dark-900"
+                                            x-ref="nicknameInput"
+                                            x-init="$watch('isEditing', value => { if (value) { $nextTick(() => $refs.nicknameInput.focus()) } })"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="absolute bottom-0 right-0 -mb-4 mr-1">
+                                    <p class="text-[14px] text-gray-400 dark:text-gray-500">v0.0.1.1</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Resize handle -->
+                <div class="resize-handle h-full" 
+                     :class="{ 'dragging': isDragging }"
+                     @mousedown="startDrag($event)">
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="flex-1 flex flex-col bg-white dark:bg-dark-800 overflow-hidden relative"
+                 @click.self="currentChatId = null; messages = []">
+                <div class="flex-1 overflow-y-auto px-4 py-6 sm:px-6" 
+                     x-ref="chatContainer"
+                     @scroll.passive="checkScroll">
+                    <!-- Welcome message for empty chat -->
+                    <template x-if="messages.length === 0">
+                        <div class="max-w-3xl mx-auto">
+                            <div class="text-center mb-8">
+                                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 mb-4">
+                                    <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4-4-4z" />
+                                    </svg>
+                                </div>
+                                <h2 class="text-2xl font-semibold text-gray-900 dark:text-white mb-2">欢迎使用 CYNEU WebUI</h2>
+                                <p class="text-gray-600 dark:text-gray-400 mb-6">我是您的 AI 助手，让我们开始对话吧</p>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                                <div class="p-4 rounded-lg border border-gray-200 dark:border-dark-600 hover:border-primary dark:hover:border-primary transition-colors duration-200">
+                                    <h3 class="font-medium text-gray-900 dark:text-white mb-2">💡 功能介绍</h3>
+                                    <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                                        <li>• 支持多种大语言模型</li>
+                                        <li>• 实时对话响应</li>
+                                        <li>• Markdown 渲染</li>
+                                        <li>• 代码高亮显示</li>
+                                    </ul>
+                                </div>
+                                <div class="p-4 rounded-lg border border-gray-200 dark:border-dark-600 hover:border-primary dark:hover:border-primary transition-colors duration-200">
+                                    <h3 class="font-medium text-gray-900 dark:text-white mb-2">⚡️ 快捷操作</h3>
+                                    <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                                        <li>• Enter 发送消息</li>
+                                        <li>• Shift + Enter 换行</li>
+                                        <li>• 双击聊天标题可重命名</li>
+                                        <li>• 拖动侧边栏调整宽度</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-medium text-gray-900 dark:text-white mb-3">🎯 您可以这样问我</h3>
+                                <div class="grid grid-cols-1 gap-3">
+                                    <button @click="message = '能否帮我分析一下人工智能在未来医疗领域的应用前景？特别是在疾病诊断、个性化治疗和药物研发方面。'" 
+                                        class="text-left p-3 rounded-lg bg-gray-50 dark:bg-dark-700 hover:bg-gray-100 dark:hover:bg-dark-600 text-gray-600 dark:text-gray-300 text-sm transition-colors duration-200">
+                                        能否帮我分析一下人工智能在未来医疗领域的应用前景？特别是在疾病诊断、个性化治疗和药物研发方面。
+                                    </button>
+                                    <button @click="message = '请介绍一下量子计算机的工作原理，以及它可能给我们的生活带来哪些革命性的改变？'" 
+                                        class="text-left p-3 rounded-lg bg-gray-50 dark:bg-dark-700 hover:bg-gray-100 dark:hover:bg-dark-600 text-gray-600 dark:text-gray-300 text-sm transition-colors duration-200">
+                                        请介绍一下量子计算机的工作原理，以及它可能给我们的生活带来哪些革命性的改变？
+                                    </button>
+                                    <button @click="message = '可再生能源技术如何帮助解决全球气候变化问题？未来清洁能源发展的主要方向是什么？'" 
+                                        class="text-left p-3 rounded-lg bg-gray-50 dark:bg-dark-700 hover:bg-gray-100 dark:hover:bg-dark-600 text-gray-600 dark:text-gray-300 text-sm transition-colors duration-200">
+                                        可再生能源技术如何帮助解决全球气候变化问题？未来清洁能源发展的主要方向是什么？
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-for="(message, index) in messages" :key="index">
+                        <div :class="{'flex space-x-3 mb-6': true, 'justify-end': message.role === 'user'}" :id="'message-' + index">
+                            <template x-if="message.role === 'assistant'">
+                                <div class="flex-shrink-0">
+                                    <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                                        <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                d="M12 6C8.68629 6 6 8.68629 6 12C6 13.5 6.5 14.5 7.5 15.5C8.5 16.5 9.5 17 11 17C11.5 17 12 16.8 12 16.5C12 16.2 11.8 16 11.5 16C10.3 16 9.5 15.5 8.8 14.8C8.1 14.1 7.7 13.3 7.7 12C7.7 9.6 9.6 7.7 12 7.7C14.4 7.7 16.3 9.6 16.3 12C16.3 13.3 15.9 14.1 15.2 14.8C14.5 15.5 13.7 16 12.5 16C12.2 16 12 16.2 12 16.5C12 16.8 12.5 17 13 17C14.5 17 15.5 16.5 16.5 15.5C17.5 14.5 18 13.5 18 12C18 8.68629 15.3137 6 12 6Z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <div class="flex-1 flex flex-col">
+                                <div :class="{
+                                    'rounded-lg px-4 py-3 max-w-3xl relative group': true,
+                                    'bg-gray-100 dark:bg-gray-700': message.role === 'assistant',
+                                    'bg-primary ml-auto': message.role === 'user'
+                                }">
+                                    <!-- Copy button -->
+                                    <button @click="copyMessage(message.content)"
+                                            class="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                                            :class="message.role === 'user' ? '-left-10 text-gray-400 dark:text-gray-500' : '-right-10 text-gray-400 dark:text-gray-500'"
+                                            title="复制消息">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                        </svg>
+                                    </button>
+                                    
+                                    <!-- Success notification -->
+                                    <div x-show="message.showCopySuccess"
+                                         x-transition:enter="transition ease-out duration-200"
+                                         x-transition:enter-start="opacity-0 scale-95"
+                                         x-transition:enter-end="opacity-100 scale-100"
+                                         x-transition:leave="transition ease-in duration-150"
+                                         x-transition:leave-start="opacity-100 scale-100"
+                                         x-transition:leave-end="opacity-0 scale-95"
+                                         class="absolute px-2 py-1 rounded text-xs font-medium bg-gray-700/90 dark:bg-gray-600/90 text-gray-100"
+                                         :class="message.role === 'user' ? '-left-16 top-0' : '-right-16 top-0'">
+                                        已复制
+                                    </div>
+                                    
+                                    <div x-html="renderMarkdown(message.content)" 
+                                         :class="{
+                                            'prose dark:prose-invert max-w-none': message.role === 'assistant',
+                                            'max-w-none text-white': message.role === 'user'
+                                         }">
+                                    </div>
+                                    <div x-show="message.role === 'assistant' && isThinking && !message.content" 
+                                         class="text-sm text-gray-500 dark:text-gray-400 thinking">
+                                        思考中
+                                    </div>
+                                </div>
+                                <div class="mt-1 text-[11px] opacity-60" 
+                                     :class="message.role === 'user' ? 'ml-auto text-gray-500 dark:text-gray-400' : 'text-gray-500 dark:text-gray-400'"
+                                     x-text="message.created_at ? new Date(message.created_at).toLocaleString('zh-CN', { 
+                                         year: 'numeric',
+                                         month: '2-digit',
+                                         day: '2-digit',
+                                         hour: '2-digit',
+                                         minute: '2-digit',
+                                         hour12: false
+                                     }) : ''">
+                                </div>
+                            </div>
+
+                            <template x-if="message.role === 'user'">
+                                <div class="flex-shrink-0">
+                                    <div class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-400 flex items-center justify-center shadow-lg">
+                                        <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Scroll to bottom button -->
+                <div class="relative">
+                    <button 
+                        @click="scrollToBottom"
+                        class="scroll-button absolute right-4 -top-12"
+                        :class="{ 'visible': showScrollButtons }"
+                        title="滚动到底部"
+                    >
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Input Area -->
+                <div class="flex-shrink-0 px-4 py-4 border-t border-gray-200 dark:border-dark-700">
+                    <div class="max-w-[80%] mx-auto">
+                        <form @submit.prevent="sendMessage(message)">
+                            <div class="space-y-3">
+                                <div class="relative">
+                                    <textarea
+                                        x-model="message"
+                                        @keydown.enter="$event.shiftKey ? null : ($event.preventDefault(), sendMessage(message))"
+                                        rows="2"
+                                        class="custom-textarea block w-full rounded-lg pl-4 pr-12 py-3 border-0 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-dark-600 placeholder:text-gray-400 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6 bg-white dark:bg-dark-900 resize-none"
+                                        placeholder="输入您的消息... (Enter 发送, Shift+Enter 换行)"
+                                        style="min-height: 64px; max-height: 200px;"
+                                        @input="$el.style.height = '64px'; $el.style.height = $el.scrollHeight + 'px'"
+                                    ></textarea>
+                                    <button
+                                        type="submit"
+                                        :disabled="!message.trim()"
+                                        class="absolute right-2 bottom-2 inline-flex items-center rounded-lg px-2 py-2 text-primary hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- Model Selector -->
+                                <div class="relative">
+                                    <button 
+                                        type="button" 
+                                        class="model-selector inline-flex items-center gap-x-1.5 rounded-md px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                                        @click="modelSelectorOpen = !modelSelectorOpen"
+                                    >
+                                        <svg class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12h18M9 6l-6 6 6 6M21 6l-6 6 6 6" />
+                                        </svg>
+                                        <span x-text="selectedModel" class="font-medium"></span>
+                                        <svg class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform duration-200" 
+                                             :class="{ 'rotate-180': modelSelectorOpen }"
+                                             viewBox="0 0 24 24" 
+                                             fill="none" 
+                                             stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    <!-- Model Dropdown -->
+                                    <div 
+                                        x-show="modelSelectorOpen" 
+                                        @click.away="modelSelectorOpen = false"
+                                        class="model-dropdown absolute bottom-full mb-1 left-0 z-10 w-40 rounded-lg bg-white/95 dark:bg-dark-800/95 shadow-lg focus:outline-none overflow-hidden"
+                                        x-transition:enter="transition ease-out duration-200"
+                                        x-transition:enter-start="opacity-0 scale-95"
+                                        x-transition:enter-end="opacity-100 scale-100"
+                                        x-transition:leave="transition ease-in duration-150"
+                                        x-transition:leave-start="opacity-100 scale-100"
+                                        x-transition:leave-end="opacity-0 scale-95"
+                                    >
+                                        <div class="py-1">
+                                            <template x-for="model in models" :key="model">
+                                                <a 
+                                                    href="#" 
+                                                    class="block px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-50/80 dark:hover:bg-dark-600/80 transition-colors duration-150" 
+                                                    :class="{ 'bg-gray-50/80 dark:bg-dark-600/80 text-gray-900 dark:text-white font-medium': model === selectedModel }"
+                                                    @click.prevent="selectedModel = model; localStorage.setItem('selectedModel', model); modelSelectorOpen = false"
+                                                    x-text="model"
+                                                ></a>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
