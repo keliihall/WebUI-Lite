@@ -8,4 +8,4 @@ storage:
 server:
   host: "localhost"
   port: 8080
-  cors_origins: ["*"] 
+  cors_origins: ["http://localhost:5173", "http://localhost:5174"]  # 开发服务器地址 

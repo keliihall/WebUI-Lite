@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches) }" x-bind:class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - CYNEU WebUI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0969da',
+                        secondary: '#6e7781',
+                        dark: {
+                            '900': '#15171a',
+                            '800': '#1a1d21',
+                            '700': '#22262b',
+                            '600': '#2b3038',
+                            '500': '#363b44',
+                            'border': 'rgba(75, 85, 99, 0.15)'
+                        }
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/alpinejs" defer></script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-900 transition-colors duration-200" x-data="{
+    username: '',
+    password: '',
+    rememberMe: false,
+    isLoading: false,
+    errorMessage: '',
+    returnTo: new URLSearchParams(window.location.search).get('returnTo') || '/',
+    async login() {
+        if (!this.username || !this.password) {
+            this.errorMessage = '请输入用户名和密码';
+            return;
+        }
+        
+        this.isLoading = true;
+        this.errorMessage = '';
+        
+        try {
+            const response = await fetch('http://localhost:8080/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: this.username,
+                    password: this.password,
+                    remember_me: this.rememberMe
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('auth_token', data.token);
+                window.location.href = this.returnTo;
+            } else {
+                const error = await response.json();
+                this.errorMessage = error.detail || '登录失败，请检查用户名和密码';
+            }
+        } catch (error) {
+            this.errorMessage = '网络错误，请稍后重试';
+        } finally {
+            this.isLoading = false;
+        }
+    },
+    toggleDarkMode() {
+        this.darkMode = !this.darkMode;
+        localStorage.setItem('darkMode', this.darkMode);
+    }
+}">
+    <div class="min-h-full flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <!-- Dark mode toggle -->
+        <div class="absolute top-4 right-4">
+            <button 
+                @click="toggleDarkMode()" 
+                class="rounded-lg p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-700"
+            >
+                <svg x-show="!darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+                <svg x-show="darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="sm:mx-auto sm:w-full sm:max-w-md">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold tracking-tight">
+                    <span class="bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">CYNEU </span>
+                    <span class="text-gray-900 dark:text-white">WebUI</span>
+                </h1>
+                <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    轻量级 Ollama Web 界面
+                </p>
+            </div>
+
+            <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+                <div class="bg-white dark:bg-dark-800 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-200 dark:border-dark-border">
+                    <form class="space-y-6" @submit.prevent="login">
+                        <!-- Error Message -->
+                        <div x-show="errorMessage" class="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <p x-text="errorMessage" class="text-sm text-red-500 dark:text-red-400"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                用户名
+                            </label>
+                            <div class="mt-1">
+                                <input 
+                                    id="username" 
+                                    name="username" 
+                                    type="text" 
+                                    required 
+                                    x-model="username"
+                                    class="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white dark:bg-dark-700 text-gray-900 dark:text-white"
+                                >
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                密码
+                            </label>
+                            <div class="mt-1">
+                                <input 
+                                    id="password" 
+                                    name="password" 
+                                    type="password" 
+                                    required 
+                                    x-model="password"
+                                    class="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white dark:bg-dark-700 text-gray-900 dark:text-white"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <input 
+                                    id="remember-me" 
+                                    name="remember-me" 
+                                    type="checkbox" 
+                                    x-model="rememberMe"
+                                    class="h-4 w-4 text-primary focus:ring-primary border-gray-300 dark:border-dark-600 rounded bg-white dark:bg-dark-700"
+                                >
+                                <label for="remember-me" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                                    记住我
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <button 
+                                type="submit" 
+                                class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-200"
+                                :disabled="isLoading"
+                            >
+                                <svg x-show="isLoading" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span x-text="isLoading ? '登录中...' : '登录'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

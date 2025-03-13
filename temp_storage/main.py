@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -15,7 +15,7 @@ import markdown
 import json
 import uuid
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 # Configuration validation model
@@ -48,40 +48,18 @@ DEFAULT_CONFIG = {
     "server": {
         "host": "localhost",
         "port": 8080,
-        "cors_origins": ["*"]
+        "cors_origins": ["http://localhost:5173"]
     }
 }
 
 def load_config() -> Dict[str, Any]:
-    """Load and validate configuration"""
+    """Load configuration from file or use defaults"""
     try:
-        # Get the directory containing the script
-        script_dir = Path(__file__).parent.absolute()
-        config_path = script_dir / "config.yaml"
-
-        # Load configuration file
-        if config_path.exists():
-            with open(config_path) as f:
-                config_data = yaml.safe_load(f)
-        else:
-            print(f"Warning: Configuration file not found at {config_path}, using defaults")
-            return DEFAULT_CONFIG
-
-        # Merge with defaults
-        merged_config = DEFAULT_CONFIG.copy()
-        for section in config_data:
-            if section in merged_config:
-                merged_config[section].update(config_data[section])
-
-        # Validate configuration
-        Config(**merged_config)
-
-        return merged_config
-    except yaml.YAMLError as e:
-        print(f"Error parsing configuration file: {e}")
-        return DEFAULT_CONFIG
+        with open("backend/config.yaml", "r") as f:
+            user_config = yaml.safe_load(f)
+        return {**DEFAULT_CONFIG, **user_config}
     except Exception as e:
-        print(f"Error loading configuration: {e}")
+        print(f"Failed to load config, using defaults: {e}")
         return DEFAULT_CONFIG
 
 # Load configuration
@@ -99,14 +77,14 @@ async def add_security_headers(request, call_next):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdnjs.cloudflare.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data: https:; "
-        "connect-src 'self' http://localhost:8080 ws://localhost:8080"
+        "connect-src 'self' http://localhost:8080 http://localhost:5173 http://localhost:5174 ws://localhost:8080"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
 
-# CORS
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config["server"]["cors_origins"],
@@ -130,6 +108,8 @@ def init_db():
         # Initialize database
         conn = sqlite3.connect(str(db_path))
         c = conn.cursor()
+        
+        # Create chats table
         c.execute('''
             CREATE TABLE IF NOT EXISTS chats (
                 id TEXT PRIMARY KEY,
@@ -139,6 +119,36 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Create example questions table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS example_questions (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                category TEXT,
+                order_num INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Insert default example questions if none exist
+        c.execute("SELECT COUNT(*) FROM example_questions")
+        if c.fetchone()[0] == 0:
+            default_questions = [
+                "你能做什么？",
+                "如何使用代码实现一个简单的Web服务器？",
+                "解释一下什么是递归算法？",
+                "帮我优化这段代码的性能",
+                "如何实现用户认证系统？"
+            ]
+            for i, question in enumerate(default_questions):
+                question_id = str(uuid.uuid4())
+                c.execute(
+                    "INSERT INTO example_questions (id, content, order_num) VALUES (?, ?, ?)",
+                    (question_id, question, i)
+                )
+        
         conn.commit()
         conn.close()
     except Exception as e:
@@ -160,6 +170,19 @@ class Chat(BaseModel):
 class ChatUpdate(BaseModel):
     title: str
 
+class OllamaConfigUpdate(BaseModel):
+    host: str
+
+class ExampleQuestion(BaseModel):
+    content: str
+    category: Optional[str] = None
+    order_num: Optional[int] = None
+
+class ExampleQuestionUpdate(BaseModel):
+    content: Optional[str] = None
+    category: Optional[str] = None
+    order_num: Optional[int] = None
+
 async def stream_response(response):
     """Stream response from Ollama"""
     try:
@@ -180,10 +203,20 @@ async def stream_response(response):
     except Exception as e:
         yield f"Error: {str(e)}"
 
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
 # Routes
 @app.get("/")
 async def read_root():
-    return FileResponse("../index.html")
+    """Serve index page or redirect to login"""
+    return FileResponse(FRONTEND_DIR / "frontend" / "login.html")
+
+@app.get("/settings")
+async def read_settings():
+    """Serve settings page"""
+    return FileResponse(FRONTEND_DIR / "settings.html")
 
 @app.get("/api/models")
 async def get_models():
@@ -239,7 +272,7 @@ async def create_chat(chat: Chat):
     except Exception as e:
         print(f"Error creating chat: {e}")
         # Clean up if database insert failed
-        if os.path.exists(chat_dir):
+        if os.path.exists(chat_file):
             try:
                 os.remove(chat_file)
                 os.rmdir(chat_dir)
@@ -428,8 +461,217 @@ async def update_chat(chat_id: str, chat_update: ChatUpdate):
         print(f"Error updating chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/settings/example-questions")
+async def get_example_questions():
+    """Get all example questions"""
+    try:
+        conn = sqlite3.connect(config["storage"]["database"])
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, content, category, order_num, created_at, updated_at 
+            FROM example_questions 
+            ORDER BY order_num ASC
+        """)
+        questions = c.fetchall()
+        conn.close()
+        
+        return {
+            "questions": [
+                {
+                    "id": q[0],
+                    "content": q[1],
+                    "category": q[2],
+                    "order_num": q[3],
+                    "created_at": q[4],
+                    "updated_at": q[5]
+                }
+                for q in questions
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/settings/example-questions")
+async def create_example_question(question: ExampleQuestion):
+    """Create a new example question"""
+    try:
+        conn = sqlite3.connect(config["storage"]["database"])
+        c = conn.cursor()
+        
+        # Check if we already have 5 questions
+        c.execute("SELECT COUNT(*) FROM example_questions")
+        if c.fetchone()[0] >= 5:
+            raise HTTPException(status_code=400, detail="Maximum number of example questions reached (5)")
+        
+        # Get the next order number if not provided
+        if question.order_num is None:
+            c.execute("SELECT COALESCE(MAX(order_num), -1) + 1 FROM example_questions")
+            question.order_num = c.fetchone()[0]
+        
+        question_id = str(uuid.uuid4())
+        c.execute(
+            """
+            INSERT INTO example_questions (id, content, category, order_num) 
+            VALUES (?, ?, ?, ?)
+            """,
+            (question_id, question.content, question.category, question.order_num)
+        )
+        conn.commit()
+        
+        # Get the created question
+        c.execute(
+            """
+            SELECT id, content, category, order_num, created_at, updated_at 
+            FROM example_questions WHERE id = ?
+            """,
+            (question_id,)
+        )
+        q = c.fetchone()
+        conn.close()
+        
+        return {
+            "question": {
+                "id": q[0],
+                "content": q[1],
+                "category": q[2],
+                "order_num": q[3],
+                "created_at": q[4],
+                "updated_at": q[5]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/settings/example-questions/{question_id}")
+async def update_example_question(
+    question_id: str,
+    question_update: ExampleQuestionUpdate
+):
+    """Update an example question"""
+    try:
+        conn = sqlite3.connect(config["storage"]["database"])
+        c = conn.cursor()
+        
+        # Check if question exists
+        c.execute("SELECT id FROM example_questions WHERE id = ?", (question_id,))
+        if not c.fetchone():
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Build update query
+        update_fields = []
+        params = []
+        if question_update.content is not None:
+            update_fields.append("content = ?")
+            params.append(question_update.content)
+        if question_update.category is not None:
+            update_fields.append("category = ?")
+            params.append(question_update.category)
+        if question_update.order_num is not None:
+            update_fields.append("order_num = ?")
+            params.append(question_update.order_num)
+        
+        if update_fields:
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            query = f"""
+                UPDATE example_questions 
+                SET {', '.join(update_fields)}
+                WHERE id = ?
+            """
+            params.append(question_id)
+            c.execute(query, params)
+            conn.commit()
+        
+        # Get updated question
+        c.execute(
+            """
+            SELECT id, content, category, order_num, created_at, updated_at 
+            FROM example_questions WHERE id = ?
+            """,
+            (question_id,)
+        )
+        q = c.fetchone()
+        conn.close()
+        
+        return {
+            "question": {
+                "id": q[0],
+                "content": q[1],
+                "category": q[2],
+                "order_num": q[3],
+                "created_at": q[4],
+                "updated_at": q[5]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/settings/example-questions/{question_id}")
+async def delete_example_question(question_id: str):
+    """Delete an example question"""
+    try:
+        conn = sqlite3.connect(config["storage"]["database"])
+        c = conn.cursor()
+        
+        # Check if question exists
+        c.execute("SELECT id FROM example_questions WHERE id = ?", (question_id,))
+        if not c.fetchone():
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Delete question
+        c.execute("DELETE FROM example_questions WHERE id = ?", (question_id,))
+        
+        # Reorder remaining questions
+        c.execute(
+            """
+            UPDATE example_questions 
+            SET order_num = (
+                SELECT COUNT(*) - 1 
+                FROM example_questions AS eq2 
+                WHERE eq2.order_num <= example_questions.order_num 
+                AND eq2.id != ?
+            )
+            """,
+            (question_id,)
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/settings/example-questions/reorder")
+async def reorder_example_questions(
+    order: List[str]
+):
+    """Reorder example questions"""
+    try:
+        conn = sqlite3.connect(config["storage"]["database"])
+        c = conn.cursor()
+        
+        # Update order for each question
+        for i, question_id in enumerate(order):
+            c.execute(
+                "UPDATE example_questions SET order_num = ? WHERE id = ?",
+                (i, question_id)
+            )
+        
+        conn.commit()
+        conn.close()
+        
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Mount static files (after all API routes)
-app.mount("/", StaticFiles(directory="../", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
