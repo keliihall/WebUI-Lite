@@ -68,6 +68,8 @@ export function createChatStore() {
         })(),
         models: config.models.available,
         showScrollButtons: false,
+        roles: [],
+        selectedRole: null,
 
         ...createSidebarResizer(),
 
@@ -85,7 +87,19 @@ export function createChatStore() {
                 document.documentElement.classList.add('dark');
             }
 
+            // 先加载角色
+            await this.loadRoles();
+            // 再加载其他数据
             await this.loadInitialData();
+            
+            // 监听selectedRole的变化
+            this.$watch('selectedRole', value => {
+                if (value) {
+                    safeSetLocalStorage(config.storage.keys.selectedRoleId, value.id);
+                } else {
+                    safeSetLocalStorage(config.storage.keys.selectedRoleId, '');
+                }
+            });
             
             this.$nextTick(() => {
                 const chatContainer = this.$refs.chatContainer;
@@ -139,16 +153,25 @@ export function createChatStore() {
 
         async loadModels() {
             try {
+                // 先获取后端配置的已启用模型列表
+                const settingsResponse = await fetch(`${config.api.baseUrl}/api/settings`);
+                const settingsData = await settingsResponse.json();
+                
+                // 获取所有可用模型
                 const response = await fetch(`${config.api.baseUrl}/api/models`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
-                this.models = data.models || config.models.available;
                 
+                // 只使用已启用的模型
+                this.models = (data.models || []).filter(model => 
+                    settingsData.models.available.includes(model)
+                );
+                
+                // 如果当前选择的模型不在已启用列表中，选择第一个已启用的模型
                 if (this.models.length > 0) {
-                    if (!localStorage.getItem(config.storage.keys.selectedModel) || 
-                        !this.models.includes(this.selectedModel)) {
+                    if (!this.models.includes(this.selectedModel)) {
                         this.selectedModel = this.models[0];
                         localStorage.setItem(config.storage.keys.selectedModel, this.models[0]);
                     }
@@ -225,36 +248,33 @@ export function createChatStore() {
                 }
 
                 if (!this.currentChatId) {
-                    // Create a new chat if none exists
                     const chat = await this.createNewChat();
                     if (!chat) {
                         throw new Error('创建新对话失败');
                     }
                 }
 
-                // Check if this is the first message and chat has default title
+                // 提前清空消息文本框
+                this.message = '';
+
                 const currentChat = this.chats.find(chat => chat.id === this.currentChatId);
                 const isDefaultTitle = currentChat && currentChat.title === config.chat.defaultTitle;
                 const isFirstMessage = this.messages.length === 0;
 
-                // Add user message
                 this.messages = [...this.messages, { 
-                role: 'user',
+                    role: 'user',
                     content: messageText,
                     created_at: new Date().toISOString(),
                     showCopySuccess: false
                 }];
                 
-                // Auto rename chat if it's the first message
                 if (isFirstMessage && isDefaultTitle) {
                     const newTitle = messageText.slice(0, 20) + (messageText.length > 20 ? '...' : '');
                     await this.renameChat(this.currentChatId, newTitle);
                 }
                 
-                // Set thinking state before adding empty message
-            this.isThinking = true;
+                this.isThinking = true;
 
-                // Add empty assistant message that will be updated
                 this.messages = [...this.messages, { 
                     role: 'assistant', 
                     content: '',
@@ -262,27 +282,30 @@ export function createChatStore() {
                     showCopySuccess: false
                 }];
                 
-                // Get the last message (assistant's message)
                 const lastMessageIndex = this.messages.length - 1;
                 
-                // Start streaming
+                const requestBody = {
+                role: 'user',
+                    content: messageText,
+                    model: this.selectedModel || (currentChat ? currentChat.model : 'deepseek-r1:1.5b')
+                };
+
+                if (this.selectedRole) {
+                    requestBody.system_prompt = this.selectedRole.system_prompt;
+                }
+
                 const response = await fetch(`${config.api.baseUrl}/api/chat/${this.currentChatId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        role: 'user',
-                        content: messageText,
-                        model: this.selectedModel || 'deepseek-r1:1.5b'
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.detail || '发送消息失败');
+                    throw new Error(errorData.detail || `发送消息失败 (${response.status})`);
                 }
 
-                // Clear the input after successful send
-                this.message = '';
+            this.message = '';
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -293,13 +316,11 @@ export function createChatStore() {
                     
                     if (done) break;
 
-                    // Decode the chunk and split by newlines
                     const chunk = decoder.decode(value, { stream: true });
                     buffer += chunk;
                     
-                    // Process complete lines
                     const lines = buffer.split('\n');
-                    buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                    buffer = lines.pop() || '';
                     
                     for (const line of lines) {
                         if (!line.trim()) continue;
@@ -309,7 +330,8 @@ export function createChatStore() {
                             
                             if (data.error) {
                                 console.error('Error from server:', data.error);
-                                this.messages[lastMessageIndex].content += `\nError: ${data.error}`;
+                                this.messages[lastMessageIndex].content = `Error: ${data.error}`;
+                                this.isThinking = false;
                                 break;
                             }
 
@@ -319,18 +341,17 @@ export function createChatStore() {
                             }
                             
                             if (data.response) {
-                                // Update the last message's content
                                 this.messages[lastMessageIndex].content += data.response;
-                                // Force Vue to recognize the change
                                 this.messages = [...this.messages];
                             }
                         } catch (e) {
                             console.error('Error parsing response:', e);
+                            this.messages[lastMessageIndex].content = `Error: Failed to parse server response`;
+                            this.isThinking = false;
                         }
                     }
                 }
 
-                // Process any remaining buffer
                 if (buffer.trim()) {
                     try {
                         const data = JSON.parse(buffer);
@@ -345,7 +366,6 @@ export function createChatStore() {
 
                 this.isThinking = false;
 
-                // Scroll to bottom after content is loaded
                 this.$nextTick(() => {
                     const chatContainer = this.$refs.chatContainer;
                     if (chatContainer) {
@@ -355,9 +375,7 @@ export function createChatStore() {
 
             } catch (error) {
                 console.error('Error in sendMessage:', error);
-                // Remove the last (empty) assistant message
                 this.messages = this.messages.slice(0, -1);
-                // Add error message to chat
                 this.messages = [...this.messages, {
                     role: 'system',
                     content: typeof error === 'string' ? error : error.message || '发送消息失败'
@@ -413,7 +431,7 @@ export function createChatStore() {
                 if (this.currentChatId === chatId) {
                     this.currentChatId = this.chats.length > 0 ? this.chats[0].id : null;
                         this.messages = [];
-                }
+                    }
             } catch (error) {
                 const { message, timeout } = handleApiError(error, 'deleting chat');
                 this.error = message;
@@ -463,19 +481,15 @@ export function createChatStore() {
             try {
                 await navigator.clipboard.writeText(content);
                 
-                // Find the message and show success notification
                 const messageIndex = this.messages.findIndex(m => m.content === content);
                 if (messageIndex !== -1) {
                     this.messages[messageIndex].showCopySuccess = true;
                     
-                    // Hide notification after 2 seconds
                     setTimeout(() => {
                         this.messages[messageIndex].showCopySuccess = false;
-                        // Force Alpine to recognize the change
                         this.messages = [...this.messages];
                     }, 2000);
                     
-                    // Force Alpine to recognize the change
                     this.messages = [...this.messages];
                 }
             } catch (error) {
@@ -484,6 +498,54 @@ export function createChatStore() {
                 setTimeout(() => {
                     this.error = null;
                 }, 2000);
+            }
+        },
+
+        async loadRoles() {
+            try {
+                const response = await fetch(`${config.api.baseUrl}/api/roles`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                this.roles = Array.isArray(data) ? data : [];
+                this.roles = this.roles.map(role => ({
+                    id: role.id || crypto.randomUUID(),
+                    name: role.name || '',
+                    description: role.description || '',
+                    system_prompt: role.system_prompt || '',
+                    category: role.category || '其他',
+                    is_built_in: role.is_built_in || false,
+                    created_at: role.created_at || new Date().toISOString()
+                }));
+
+                // 不自动恢复选中的角色
+                this.selectedRole = null;
+                safeSetLocalStorage(config.storage.keys.selectedRoleId, '');
+            } catch (error) {
+                console.error('Error loading roles:', error);
+                this.error = '加载角色列表失败';
+                setTimeout(() => {
+                    this.error = null;
+                }, 3000);
+                this.roles = [];
+                this.selectedRole = null;
+            }
+        },
+
+        toggleRole(role) {
+            if (!role) {
+                this.selectedRole = null;
+                safeSetLocalStorage(config.storage.keys.selectedRoleId, '');
+                return;
+            }
+            
+            if (this.selectedRole?.id === role.id) {
+                this.selectedRole = null;
+                safeSetLocalStorage(config.storage.keys.selectedRoleId, '');
+            } else {
+                this.selectedRole = role;
+                safeSetLocalStorage(config.storage.keys.selectedRoleId, role.id);
             }
         }
     };

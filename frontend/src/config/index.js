@@ -4,7 +4,7 @@ export default {
     },
     models: {
         default: 'deepseek-coder:1.3b',
-        available: ['deepseek-coder:1.3b', 'llama2:7b', 'mistral:7b', 'codellama:7b']
+        available: []  // 默认为空，从后端获取
     },
     ui: {
         defaultSidebarWidth: 256,
@@ -25,7 +25,8 @@ export default {
         keys: {
             darkMode: 'darkMode',
             selectedModel: 'selectedModel',
-            sidebarWidth: 'sidebarWidth'
+            sidebarWidth: 'sidebarWidth',
+            selectedRoleId: 'selectedRoleId'
         }
     }
 }; 

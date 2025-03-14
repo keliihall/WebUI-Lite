@@ -15,10 +15,10 @@ class ServerConfig(BaseModel):
 
 class ModelsConfig(BaseModel):
     default: str = "deepseek-r1:1.5b"
-    available: List[str] = ["deepseek-r1:1.5b", "qwen2.5:1.5b", "llama3.2:latest"]
+    available: List[str] = []
 
 class Config(BaseModel):
-    ollama: OllamaConfig
+    ollama: OllamaConfig = OllamaConfig()
     storage: StorageConfig
     server: ServerConfig
     models: ModelsConfig = ModelsConfig()

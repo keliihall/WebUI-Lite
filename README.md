@@ -1,6 +1,6 @@
 # CYNEU WebUI
 
-![version](https://img.shields.io/badge/version-v0.0.1.1-blue.svg)
+![version](https://img.shields.io/badge/version-v0.0.2-blue.svg)
 ![python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![fastapi](https://img.shields.io/badge/fastapi-0.104.1-green.svg)
 ![ollama](https://img.shields.io/badge/ollama-0.1.17-blue.svg)
@@ -11,12 +11,18 @@
 
 ## 更新日志
 
-### v0.0.1.1 (2024-03-xx)
+### v0.0.2 (2025-03-14)
+- 优化了日志输出，减少调试信息
+- 修复了深色模式状态管理问题
+- 改进了网站图标处理
+- 优化了代码结构
+
+### v0.0.1.1 (2025-03-13)
 - 优化了用户信息区域的显示
 - 调整了版本号显示位置和样式
 - 改进了界面布局和用户体验
 
-### v0.0.1 (2024-03-xx)
+### v0.0.1 (2025-03-11)
 - 初始版本发布
 - 实现基本的对话功能
 - 支持多种大语言模型
@@ -151,35 +157,31 @@ server:
 webui-lite/
 ├── frontend/                 # 前端代码
 │   ├── src/                 # 源代码目录
-│   │   ├── components/     # React 组件
+│   │   ├── components/     # 组件目录
 │   │   │   ├── Chat/      # 聊天相关组件
-│   │   │   │   ├── ChatInput.js     # 聊天输入框组件
-│   │   │   │   └── ChatMessage.js   # 聊天消息组件
-│   │   │   ├── Sidebar/   # 侧边栏组件
-│   │   │   │   └── ModelSelector.js # 模型选择器组件
+│   │   │   ├── Settings/  # 设置相关组件
 │   │   │   └── shared/    # 共享组件
-│   │   │       ├── DarkModeToggle.js    # 深色模式切换
-│   │   │       └── LoadingIndicator.js   # 加载指示器
-│   │   ├── config/        # 前端配置
-│   │   │   └── index.js   # 配置文件（API地址、模型设置等）
+│   │   ├── config/        # 配置文件
+│   │   │   └── index.js   # 主配置文件
 │   │   ├── store/         # 状态管理
-│   │   │   └── chat.js    # 聊天状态管理
+│   │   │   ├── chat.js    # 聊天状态管理
+│   │   │   └── settings.js # 设置状态管理
 │   │   ├── utils/         # 工具函数
 │   │   │   ├── api.js     # API 请求封装
 │   │   │   ├── error.js   # 错误处理
-│   │   │   └── markdown.js # Markdown 渲染
-│   │   ├── styles/        # 样式文件
-│   │   │   └── main.css   # 主样式文件
-│   │   └── index.js       # 前端入口文件
+│   │   │   ├── markdown.js # Markdown 渲染
+│   │   │   └── sidebar.js  # 侧边栏工具
+│   │   └── styles/        # 样式文件
+│   │       └── main.css   # 主样式文件
 │   ├── index.html         # 主页面
-│   ├── settings.html      # 设置页面
-│   └── login.html         # 登录页面
+│   └── settings.html      # 设置页面
 │
 ├── backend/                # 后端代码
 │   ├── api/               # API 路由
 │   │   ├── __init__.py   # API 路由初始化
 │   │   ├── chat.py       # 聊天相关 API
 │   │   ├── models.py     # 模型相关 API
+│   │   ├── settings.py   # 设置相关 API
 │   │   └── example_questions.py # 示例问题 API
 │   ├── config/           # 配置管理
 │   │   ├── __init__.py   # 配置初始化
@@ -208,7 +210,7 @@ webui-lite/
 ├── vite.config.js       # Vite 构建配置
 ├── tailwind.config.cjs  # Tailwind CSS 配置
 ├── postcss.config.cjs   # PostCSS 配置
-└── CONTRIBUTING.md      # 贡献指南
+└── README.md            # 项目说明文档
 
 ```
 

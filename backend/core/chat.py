@@ -3,13 +3,14 @@ import sqlite3
 import uuid
 from fastapi import HTTPException
 import json
-from ..database.db_models import Chat, ChatUpdate, Message
-from ..config import config
 from datetime import datetime
+from ..database.db_models import Chat, ChatUpdate, Message
+from ..config import config_manager
 
 async def verify_chat_storage(chat_id: str) -> bool:
     """Verify that both database record and chat file exist"""
     try:
+        config = config_manager.config
         # Check database record
         conn = sqlite3.connect(config.storage.database)
         cursor = conn.cursor()
@@ -29,6 +30,7 @@ async def verify_chat_storage(chat_id: str) -> bool:
 async def create_chat(chat: Chat):
     """Create a new chat"""
     try:
+        config = config_manager.config
         # Ensure storage directory exists
         storage_dir = os.path.dirname(config.storage.chat_dir)
         if not os.path.exists(storage_dir):
@@ -95,6 +97,7 @@ async def create_chat(chat: Chat):
 
 async def get_chat_messages(chat_id: str):
     """Get messages for a chat"""
+    config = config_manager.config
     chat_file = os.path.join(config.storage.chat_dir, chat_id, "chat.json")
     try:
         with open(chat_file, "r") as f:
@@ -107,24 +110,28 @@ async def get_chat_messages(chat_id: str):
 
 async def save_message(chat_id: str, message: Message):
     """Save a message to chat history"""
-    verify_chat_storage(chat_id)
+    config = config_manager.config
+    await verify_chat_storage(chat_id)
     chat_file = os.path.join(config.storage.chat_dir, chat_id, "chat.json")
     
     try:
         with open(chat_file, "r", encoding='utf-8') as f:
             messages = json.load(f)
         
-        # Add timestamp to message
-        if not message.created_at:
-            message.created_at = datetime.now().isoformat()
+        # Convert message to dict, ensuring created_at is set
+        message_dict = {
+            "role": message.role,
+            "content": message.content,
+            "model": message.model,
+            "created_at": message.created_at or datetime.now().isoformat()
+        }
         
-        message_dict = message.dict()
         messages.append(message_dict)
         
         with open(chat_file, "w", encoding='utf-8') as f:
             json.dump(messages, f, ensure_ascii=False, indent=2)
             
-        return message
+        return message_dict
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Chat not found")
     except Exception as e:
@@ -133,6 +140,7 @@ async def save_message(chat_id: str, message: Message):
 async def get_chats():
     """Get all chats"""
     try:
+        config = config_manager.config
         conn = sqlite3.connect(config.storage.database)
         cursor = conn.cursor()
         cursor.execute("SELECT id, title, model FROM chats ORDER BY created_at DESC")
@@ -148,6 +156,7 @@ async def get_chats():
 
 async def delete_chat(chat_id: str):
     """Delete a chat"""
+    config = config_manager.config
     chat_dir = os.path.join(config.storage.chat_dir, chat_id)
     try:
         # Delete from database first
@@ -170,6 +179,7 @@ async def delete_chat(chat_id: str):
 async def update_chat(chat_id: str, chat_update: ChatUpdate):
     """Update chat details"""
     try:
+        config = config_manager.config
         conn = sqlite3.connect(config.storage.database)
         cursor = conn.cursor()
         cursor.execute(

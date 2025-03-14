@@ -1,11 +1,12 @@
 import sqlite3
 import uuid
 from pathlib import Path
-from ..config.settings import config
+from ..config import config_manager
 
 def init_db():
     """Initialize database and storage"""
     try:
+        config = config_manager.config
         # Ensure storage directory exists
         storage_dir = Path(config.storage.chat_dir)
         storage_dir.mkdir(parents=True, exist_ok=True)

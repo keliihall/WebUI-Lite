@@ -1,10 +1,11 @@
 import httpx
 from fastapi import HTTPException
-from ..config import config
+from ..config import config_manager
 
 async def get_models():
     """Get available models from Ollama service"""
     try:
+        config = config_manager.config
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{config.ollama.host}/api/tags")
             if response.status_code == 200:
@@ -14,11 +15,12 @@ async def get_models():
                 raise HTTPException(status_code=502, detail=f"Failed to get models from Ollama service: {response.text}")
     except Exception as e:
         print(f"Error connecting to Ollama service: {str(e)}")
-        return {"models": config.models.available}  # 返回默认模型列表
+        return {"models": []}  # 返回空列表而不是默认配置
 
 async def generate_response(model: str, prompt: str) -> httpx.Response:
     """Generate response from Ollama"""
     try:
+        config = config_manager.config
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{config.ollama.host}/api/generate",
@@ -30,8 +32,7 @@ async def generate_response(model: str, prompt: str) -> httpx.Response:
                         "temperature": 0.7,
                         "top_p": 0.9,
                         "top_k": 40,
-                        "num_predict": 4096,
-                        "stop": ["</s>", "User:", "Assistant:"]
+                        "num_predict": 4096
                     }
                 },
                 timeout=60.0

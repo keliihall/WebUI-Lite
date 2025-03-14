@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api import router
 from backend.database.init import init_db
 from backend.utils.security import add_security_headers
-from backend.config.settings import config
+from backend.config import config_manager
 
 # Initialize the database
 init_db()
@@ -17,7 +17,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.server.cors_origins,
+    allow_origins=config_manager.config.server.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
