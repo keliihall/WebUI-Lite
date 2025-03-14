@@ -1,5 +1,6 @@
 import config from '../config';
 import { handleApiError, handleNetworkError } from './error';
+import { getToken } from './auth';
 
 /**
  * 基础 API 请求函数
@@ -9,14 +10,23 @@ import { handleApiError, handleNetworkError } from './error';
  */
 async function apiRequest(endpoint, options = {}) {
     const url = `${config.api.baseUrl}/api${endpoint}`;
+    const token = getToken();
+    
     try {
         const response = await fetch(url, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
+                ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers
             }
         });
+
+        if (response.status === 401) {
+            localStorage.removeItem('auth_token');
+            window.location.href = `/login.html?returnTo=${encodeURIComponent(window.location.pathname)}`;
+            return;
+        }
 
         if (!response.ok) {
             const error = await response.json();

@@ -54,7 +54,7 @@ renderer.code = (code, language) => {
                 </svg>
             </button>
         </div>
-        <pre class="!bg-gray-800/50 !p-4 !rounded-lg"><code class="language-${validLanguage}">${highlightedCode}</code></pre>
+        <pre class="bg-gray-100 dark:!bg-gray-800/50 !p-4 !rounded-lg"><code class="text-gray-800 dark:text-gray-200 language-${validLanguage}">${highlightedCode}</code></pre>
     </div>`;
 };
 

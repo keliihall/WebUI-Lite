@@ -34,6 +34,10 @@
         }
     </script>
     <script type="module" src="./src/settings.js"></script>
+    <script type="module">
+        import { checkAuth } from './src/utils/auth.js';
+        checkAuth();
+    </script>
 </head>
 <body class="h-full bg-gray-50 dark:bg-dark-900 transition-colors duration-200" 
     x-data="{ 
@@ -519,9 +523,12 @@
                                 <h3 class="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
                                     CYNEU WebUI Lite
                             </h3>
-                                <span class="inline-flex items-center px-2.5 py-0.5 mt-2 text-xs font-medium bg-primary/10 text-primary rounded-full">
-                                    v0.0.1.1
-                                </span>
+                                <div class="absolute bottom-0 right-0 -mb-4 mr-1">
+                                    <p class="text-[14px] text-gray-400 dark:text-gray-500">v0.0.3</p>
+                                </div>
+                                <div class="absolute bottom-0 left-0 -mb-4 ml-1">
+                                    <button @click="logout()" class="text-[14px] text-gray-400 dark:text-gray-500 hover:text-primary dark:hover:text-primary">注销</button>
+                                </div>
                                 <p class="mt-4 text-sm text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
                                     轻量级的 Ollama Web 界面，专注于提供流畅的对话体验
                                 </p>

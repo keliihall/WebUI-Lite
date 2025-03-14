@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="h-full" x-bind:class="{ 'dark': darkMode }">
+<html lang="zh-CN" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches) }" x-bind:class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,6 +18,7 @@
         import Alpine from 'alpinejs';
         import persist from '@alpinejs/persist';
         import { createChatStore } from './src/store/chat.js';
+        import { checkAuth } from './src/utils/auth.js';
         
         window.Alpine = Alpine;
         Alpine.plugin(persist);
@@ -47,6 +48,8 @@
                         this.checkScroll();
                     }
                 });
+
+                checkAuth();
             }
         }));
         Alpine.start();
@@ -450,7 +453,7 @@
                                     </div>
                                 </div>
                                 <div class="absolute bottom-0 right-0 -mb-4 mr-1">
-                                    <p class="text-[14px] text-gray-400 dark:text-gray-500">v0.0.1.1</p>
+                                    <p class="text-[14px] text-gray-400 dark:text-gray-500">v0.0.3</p>
                                 </div>
                             </div>
                         </div>

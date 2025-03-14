@@ -3,6 +3,7 @@ import { handleApiError, handleNetworkError } from '../utils/error.js';
 import { createSidebarResizer } from '../utils/sidebar.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import config from '../config/index.js';
+import { logout } from '../utils/auth';
 
 export function createChatStore() {
     const safeGetLocalStorage = (key, defaultValue) => {
@@ -547,6 +548,10 @@ export function createChatStore() {
                 this.selectedRole = role;
                 safeSetLocalStorage(config.storage.keys.selectedRoleId, role.id);
             }
+        },
+
+        logout() {
+            logout();
         }
     };
 } 

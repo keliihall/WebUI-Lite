@@ -75,7 +75,14 @@ DEFAULT_CONFIG = {
     "server": {
         "host": "localhost [FROM_DEFAULT]",
         "port": 8080,
-        "cors_origins": ["http://localhost:5173 [FROM_DEFAULT]"]
+        "cors_origins": ["http://localhost:5173 [FROM_DEFAULT]"],
+        "secret_key": "your-secret-key-please-change-in-production",
+        "token_expire_days": 30
+    },
+    "auth": {
+        "users": {
+            "admin": "admin123"  # 默认管理员账户
+        }
     }
 }
 

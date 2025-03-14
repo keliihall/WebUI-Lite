@@ -1,6 +1,6 @@
 # CYNEU WebUI
 
-![version](https://img.shields.io/badge/version-v0.0.2-blue.svg)
+![version](https://img.shields.io/badge/version-v0.0.3-blue.svg)
 ![python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![fastapi](https://img.shields.io/badge/fastapi-0.104.1-green.svg)
 ![ollama](https://img.shields.io/badge/ollama-0.1.17-blue.svg)
@@ -10,6 +10,13 @@
 一个轻量级的 Ollama Web 界面，支持实时对话、代码高亮和 Markdown 渲染。基于 FastAPI 和 Alpine.js 构建，提供流畅的用户体验和丰富的功能。
 
 ## 更新日志
+
+### v0.0.3（2025-03-14）
+- 添加了基本的用户认证功能，包括登录、注销和路由保护
+- 实现了角色管理功能，允许创建、编辑和删除自定义角色 
+- 优化了设置页面的布局和交互
+- 修复了网站图标显示的问题
+- 其他代码结构优化和问题修复
 
 ### v0.0.2 (2025-03-14)
 - 优化了日志输出，减少调试信息
@@ -337,42 +344,4 @@ server:
     - "http://localhost:5173"
 ```
 
-2. 前端配置 (`frontend/src/config/index.js`):
-```javascript
-export default {
-    api: {
-        baseUrl: 'http://localhost:8080'  // 后端 API 地址
-    },
-    models: {
-        default: 'DeepSeek-rl：1.5b',    // 默认模型
-        available: ['DeepSeek-rl：1.5b', 'Claude 3', 'GPT-4', 'Gemini Pro']
-    },
-    ui: {
-        defaultSidebarWidth: 256,        // 侧边栏默认宽度
-        maxMessageLength: 4000,          // 最大消息长度
-        maxTitleLength: 50              // 最大标题长度
-    },
-    chat: {
-        maxExampleQuestions: 5,         // 最大示例问题数
-        defaultTitle: '新对话'          // 默认对话标题
-    }
-}
-```
-
-## 功能特性
-
-- 💬 实时对话功能
-- 🎨 支持深色/浅色主题
-- 📝 Markdown 渲染
-- 🖥️ 代码高亮显示
-- 📚 聊天历史管理
-- 🔄 流式响应
-- 🎯 示例问题建议
-- 🛠️ 可配置的模型选择
-
-## 浏览器支持
-
-- Chrome/Edge >= 79
-- Firefox >= 67
-- Safari >= 14
-- Opera >= 66
+2. 前端配置 (`

@@ -53,3 +53,13 @@ class RoleUpdate(BaseModel):
     description: Optional[str] = None
     system_prompt: Optional[str] = None
     category: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    """Login request model"""
+    username: str
+    password: str
+    remember_me: bool = False
+
+class TokenResponse(BaseModel):
+    """Token response model"""
+    token: str

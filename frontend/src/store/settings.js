@@ -1,5 +1,6 @@
 import config from '../config';
 import { handleApiError } from '../utils/error';
+import { logout } from '../utils/auth';
 
 export function createSettingsStore() {
     return {
@@ -347,6 +348,10 @@ export function createSettingsStore() {
                 this.successMessage = '';
                 this.errorMessage = '';
             }, 3000);
+        },
+
+        logout() {
+            logout();
         }
     };
 } 
